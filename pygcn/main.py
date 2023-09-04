@@ -84,11 +84,11 @@ class gcnSetting():
         val_acc_history = []
 
         # Train model  逐个epoch进行train
-        for step in range(8):
-            for sample in self.idx_train:
+        for sample in self.idx_train:
+            for step in range(8):
                 for epoch in range(self.args.epochs):
                     model_feature = self.features[sample*9+step]
-                    model_label = self.labels[sample]
+                    model_label = self.labels[sample*9+step+1]
 
                     # 返回当前时间
                     t = time.time()
@@ -142,11 +142,11 @@ class gcnSetting():
         torch.save(self.model.state_dict(), "gcn_model.pth")
         return loss_history, val_acc_history
 
-    def test(self, time_step):
+    def test(self, sample, time_step):
         self.model.eval()
-        output = self.model(self.features[time_step], self.adj)
-        loss_test = F.nll_loss(output[self.idx_test], self.labels[time_step][self.idx_test])
-        acc_test = accuracy(output[self.idx_test], self.labels[time_step][self.idx_test])
+        output = self.model(self.features[sample*9+time_step], self.adj)
+        loss_test = F.nll_loss(output, self.labels[sample*9+time_step+1])
+        acc_test = accuracy(output, self.labels[sample*9+time_step+1])
         # 测试集的损失与精度
         print("Test set results:",
               "loss= {:.4f}".format(loss_test.item()),

@@ -25,7 +25,7 @@ def raw_data(base_path):
 
     features_np = []
     for index, result in enumerate(result_array):
-        if index>10:
+        if index > 10:
             break
         print("sample" + str(index))
         f_sample = []
@@ -34,22 +34,8 @@ def raw_data(base_path):
             f_sample.append(f)
         features_np.append(f_sample)
 
-    labels = []
-    for sample_idx in range(num_samples):
-        sample_label = []
-        for node_idx in range(num_cols):
-            found_positive = False
-            for time_idx in range(len(num_times)):
-                value = result_array[sample_idx, node_idx, time_idx]
-                if value > 0:
-                    sample_label.append(time_idx)
-                    found_positive = True
-                    break
-            if not found_positive:
-                sample_label.append(10)  # 节点在所有时间步都保持为零
-        labels.append(sample_label)
+    labels_array = [step[:,0] for sample in features_np for step in sample]
 
-    labels_array = np.array(labels)
     return features_np, labels_array, aw
 def load_data():
     """Load citation network dataset (cora only for now)"""
@@ -60,8 +46,8 @@ def load_data():
         print("load exist data")
         data = scio.loadmat(saved_mat)
         Aw = data['Aw']
-        labels_array = data['labels']
         features_np = data['features']
+        labels_array = [step[:, 0] for sample in features_np for step in sample]
     else:
         print("load new data")
         features_np, labels_array, Aw = raw_data(base_path)
