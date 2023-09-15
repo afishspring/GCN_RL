@@ -4,6 +4,7 @@ import torch
 import scipy.io as scio
 import matplotlib.pyplot as plt
 import os
+import networkx as nx
 def raw_data(base_path):
     num_samples = 1000
     num_times = range(100, 1000, 100)
@@ -25,7 +26,7 @@ def raw_data(base_path):
 
     features_np = []
     for index, result in enumerate(result_array):
-        if index>10:
+        if index > 9:
             break
         print("sample" + str(index))
         f_sample = []
@@ -53,7 +54,7 @@ def raw_data(base_path):
     return features_np, labels_array, aw
 def load_data():
     """Load citation network dataset (cora only for now)"""
-    base_path = "D:\GCN-learning\Paper-Chi\ER_75_sig_gen_1_ini"
+    base_path = r"../data/ER_75_sig_gen_1_ini"
 
     saved_mat = r"../data/cora/ER_gcn.mat"
     if os.path.exists(saved_mat):
@@ -194,8 +195,21 @@ def plot_loss_with_acc_ER(loss_history, val_acc_history):
 
 
 def eigenmatrixing(res, adj):
+    G = nx.Graph()
+    # 添加节点
+    for i in range(len(adj)):
+        G.add_node(i)
+    # 添加边
+    for i in range(len(adj)):
+        for j in range(i + 1, len(adj)):
+            if adj[i][j] > 0:
+                G.add_edge(i, j)
+
+    betweenness_centrality = nx.betweenness_centrality(G)
+    closeness_centrality = nx.closeness_centrality(G)
+
     """提取网络拓扑的特征"""
-    features = np.zeros((1000, 4))
+    features = np.zeros((1000, 5))
     # 节点感染状态
     for i in range(1000):
         features[i, 0] = 1 if res[i] > 0 else 0
@@ -213,11 +227,8 @@ def eigenmatrixing(res, adj):
         features[i, 1] = res1
         features[i, 2] = res2
 
-    # 节点中心程度（一个节点所有邻居的边数量之和）
+    # 节点中心程度
     for i in range(1000):
-        num = 0
-        for j in range(1000):
-            if adj[i, j] != 0:
-                num = num + features[j, 1] + features[j, 2]
-        features[i, 3] = num
+        features[i, 3] = betweenness_centrality[i]
+        features[i, 4] = closeness_centrality[i]
     return features

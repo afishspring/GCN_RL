@@ -75,7 +75,7 @@ class gcnSetting():
             print("Optimization Finished!")
             print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
             # 绘制SF数据集图像
-            # plot_loss_with_acc_SF(loss, val_acc)
+            plot_loss_with_acc_SF(loss, val_acc)
             # 绘制ER数据集图像
             # plot_loss_with_acc_ER(loss, val_acc)
 
@@ -84,8 +84,8 @@ class gcnSetting():
         val_acc_history = []
 
         # Train model  逐个epoch进行train
-        for step in range(8):
-            for sample in self.idx_train:
+        for sample in self.idx_train:
+            for step in range(8):
                 for epoch in range(self.args.epochs):
                     model_feature = self.features[sample*9+step]
                     model_label = self.labels[sample]
