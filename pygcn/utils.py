@@ -26,8 +26,6 @@ def raw_data(base_path):
 
     features_np = []
     for index, result in enumerate(result_array):
-        if index > 9:
-            break
         print("sample" + str(index))
         f_sample = []
         for time in range(9):
@@ -54,7 +52,7 @@ def raw_data(base_path):
     return features_np, labels_array, aw
 def load_data():
     """Load citation network dataset (cora only for now)"""
-    base_path = r"../data/ER_75_sig_gen_1_ini"
+    base_path = r"../data/ER_75_sig_gen_1_ini/"
 
     saved_mat = r"../data/cora/ER_gcn.mat"
     if os.path.exists(saved_mat):
