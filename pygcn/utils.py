@@ -1,12 +1,13 @@
 import numpy as np
-import scipy.sparse as sp
+import pandas as pd
 import torch
+import scipy.sparse as sp
 import scipy.io as scio
 import matplotlib.pyplot as plt
 import os
 import networkx as nx
 def raw_data(base_path):
-    num_samples = 1000
+    num_samples = 5
     num_times = range(100, 1000, 100)
     num_cols = 1000
 
@@ -24,6 +25,19 @@ def raw_data(base_path):
             data = mat_data['StateS']
             result_array[i - 1, :, j_idx] = data
 
+    target_array = np.zeros((num_samples, 8, 1000), dtype=int)
+
+    # 遍历时间片，从第2个时间片到倒数第2个时间片
+    for t in range(1, result_array.shape[2]):
+        previous_time_slice = result_array[:, :, t - 1]
+        current_time_slice = result_array[:, :, t]
+
+        # 比较当前时间片和前一个时间片，找出节点从0变为1的情况
+        changed_nodes = ((current_time_slice > 0) & (previous_time_slice == 0)).astype(int)
+
+        # 将变化情况写入目标数组
+        target_array[:, t - 1, :] = changed_nodes
+
     features_np = []
     for index, result in enumerate(result_array):
         print("sample" + str(index))
@@ -33,28 +47,29 @@ def raw_data(base_path):
             f_sample.append(f)
         features_np.append(f_sample)
 
-    labels = []
-    for sample_idx in range(num_samples):
-        sample_label = []
-        for node_idx in range(num_cols):
-            found_positive = False
-            for time_idx in range(len(num_times)):
-                value = result_array[sample_idx, node_idx, time_idx]
-                if value > 0:
-                    sample_label.append(time_idx)
-                    found_positive = True
-                    break
-            if not found_positive:
-                sample_label.append(10)  # 节点在所有时间步都保持为零
-        labels.append(sample_label)
+    # labels = []
+    # for sample_idx in range(num_samples):
+    #     sample_label = []
+    #     for node_idx in range(num_cols):
+    #         found_positive = False
+    #         for time_idx in range(len(num_times)):
+    #             value = result_array[sample_idx, node_idx, time_idx]
+    #             if value > 0:
+    #                 sample_label.append(time_idx)
+    #                 found_positive = True
+    #                 break
+    #         if not found_positive:
+    #             sample_label.append(9)  # 节点在所有时间步都保持为零
+    #     labels.append(sample_label)
+    # labels_array = np.array(labels)
 
-    labels_array = np.array(labels)
-    return features_np, labels_array, aw
+    return features_np, target_array, aw
 def load_data():
     """Load citation network dataset (cora only for now)"""
-    base_path = r"../data/ER_75_sig_gen_1_ini/"
+    print("start loading data")
+    base_path = r"data/ER_75_sig_gen_1_ini/"
 
-    saved_mat = r"../data/cora/ER_gcn.mat"
+    saved_mat = r"data/cora/ER_gcnhh.mat"
     if os.path.exists(saved_mat):
         print("load exist data")
         data = scio.loadmat(saved_mat)
@@ -71,11 +86,15 @@ def load_data():
         }
         scio.savemat(saved_mat, data)
 
-    labels = []
-    for label in labels_array:
-        label = torch.from_numpy(label)
-        label = label.to(torch.int64).squeeze()
-        labels.append(label)
+    # labels = []
+    # for label in labels_array:
+    #     label[label == 10] = 9
+    #     label = torch.from_numpy(label)
+    #     label = label.to(torch.int64).squeeze()
+    #     labels.append(label)
+    labels_array=labels_array.astype(int)
+    labels = torch.IntTensor(labels_array)
+
     features = []
     for f_s in features_np:
         f_sample = []
@@ -140,10 +159,57 @@ def sparse_mx_to_torch_sparse_tensor(sparse_mx):
 
 def accuracy(output, labels):
     """精度计算函数"""
+    # 期望
+    # preds = torch.arange(0, 11).float().cuda() @ torch.exp(output).T
+    # preds = (preds + 0.5).to(torch.int)
+    # 最大概率
     preds = output.max(1)[1].type_as(labels)
     correct = preds.eq(labels).double()
-    correct = correct.sum()
-    return correct / len(labels)
+    # correct = correct.sum()
+    # return correct / len(labels)
+    correct = (preds == 1)[labels == 1].sum()  # 选择labels为1的样本并计算它们的正确预测数
+    total_positive_samples = (labels == 1).sum()
+    return correct / total_positive_samples
+    
+
+def number_to_color(number):
+    max_value = 10  # 假设最大值是10
+    if 0 <= number <= max_value:
+        array = ['b' for i in range(max_value+1)]
+        array[number] = 'r'
+        return array
+    else:
+        raise ValueError("Number is out of range.")
+    
+def output_view(instance, step, epoch, output, label):
+    if epoch==150:
+        label_df = pd.DataFrame({'Label': label.cpu()})
+        output_df = pd.DataFrame(output.detach().cpu().numpy(), columns=[f'{i}' for i in range(10)])
+        output_df = output_df.apply(np.exp)
+        df = pd.concat([label_df, output_df], axis=1)
+
+        # # 计算需要创建的小图数量
+        # num_rows = df.shape[0]
+
+        # # 创建一个画布
+        # fig, ax = plt.subplots(num_rows, figsize=(10, 3*num_rows))
+
+        # # 遍历每一行，为每一行创建一个独立的条形图
+        # for i, row in df.iterrows():
+        #     index = np.arange(len(row)-1)  # x 坐标位置
+        #     data = np.array(row[1:])
+        #     ax[i].bar(index, data, width=1.0, label=f'Label {row["Label"]}',color=number_to_color(int(row['Label'])))
+            
+        #     # 设置数字标签
+        #     for a, b in zip(index, data):
+        #         ax[i].text(a, round(b,2), round(b,2), ha='center', va='bottom', fontsize=20)
+        # # 显示图表
+        # plt.savefig('probability_distribution.png')
+
+        # 创建一个Excel写入对象
+        with pd.ExcelWriter('data/debug/instance'+str(instance.item())+'_step'+str(step)+'_epoch'+str(epoch)+'_output.xlsx', engine='xlsxwriter') as writer:
+            # 将DataFrame写入不同的工作表
+            df.to_excel(writer, sheet_name='Sheet1', index=False)
 
 
 def plot_loss_with_acc_SF(loss_history, val_acc_history):
@@ -166,11 +232,11 @@ def plot_loss_with_acc_SF(loss_history, val_acc_history):
 
     plt.xlabel('Epoch')
     plt.title('SF Training Loss & Validation Accuracy')
-    plt.show()
+    plt.savefig('debug.jpg')
 
 
 def plot_loss_with_acc_ER(loss_history, val_acc_history):
-    fig = plt.figure()
+    fig = plt.figure(figsize=(20,40))
     # 坐标系ax1画曲线1
     ax1 = fig.add_subplot(111)  # 指的是将plot界面分成1行1列，此子图占据从左到右从上到下的1位置
     ax1.plot(range(len(loss_history)), loss_history,

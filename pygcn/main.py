@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
-from utils import load_data, accuracy, plot_loss_with_acc_SF, plot_loss_with_acc_ER
+from utils import load_data, accuracy, output_view, plot_loss_with_acc_SF, plot_loss_with_acc_ER
 from control import Cut_off_the_link, Isolation_link, Placing_correct_information_SF, Placing_correct_information_ER
 from models import GCN
 
@@ -23,7 +23,7 @@ class gcnSetting():
                             help='Validate during training pass.')
         parser.add_argument('--seed', type=int, default=42, help='Random seed.')
         # 完整训练次数
-        parser.add_argument('--epochs', type=int, default=1000,
+        parser.add_argument('--epochs', type=int, default=200,
                             help='Number of epochs to train.')
         # 学习率 学习率过小,收敛过慢，学习率过大,错过局部最优
         parser.add_argument('--lr', type=float, default=0.01,
@@ -35,7 +35,6 @@ class gcnSetting():
                             help='Number of hidden units.')
         parser.add_argument('--dropout', type=float, default=0.5,
                             help='Dropout rate (1 - keep probability).')
-
         self.args = parser.parse_args()
         self.args.cuda = not self.args.no_cuda and torch.cuda.is_available()
 
@@ -44,14 +43,13 @@ class gcnSetting():
         if self.args.cuda:
             torch.cuda.manual_seed(self.args.seed)
 
-        # 开始训练
         # 载入数据
         self.adj, self.features, self.labels, self.idx_train, self.idx_val, self.idx_test = load_data()
 
         # 定义模型与优化器
         self.model = GCN(nfeat=self.features[0][0].shape[1],
                     nhid=self.args.hidden,
-                    nclass=self.labels[0].max().item() + 1,
+                    nclass=int(self.labels[0][0].max().item() + 1),
                     dropout=self.args.dropout,
                     time_step=9)
         self.optimizer = optim.Adam(self.model.parameters(),
@@ -60,9 +58,10 @@ class gcnSetting():
         # 是否使用GPU
         if self.args.cuda:
             self.model.cuda()
+            print("using gpu")
             self.features = [f_time.cuda() for f_sample in self.features for f_time in f_sample]
             self.adj = self.adj.cuda()
-            self.labels = [label.cuda() for label in self.labels]
+            self.labels = self.labels.cuda()
             self.idx_train = self.idx_train.cuda()
             self.idx_val = self.idx_val.cuda()
             self.idx_test = self.idx_test.cuda()
@@ -71,7 +70,7 @@ class gcnSetting():
             self.model.load_state_dict(torch.load("gcn_model.pth"))
         except FileNotFoundError:
             t_total = time.time()
-            loss, val_acc = self.train()
+            loss, val_acc = self.train() 
             print("Optimization Finished!")
             print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
             # 绘制SF数据集图像
@@ -88,7 +87,7 @@ class gcnSetting():
             for step in range(8):
                 for epoch in range(self.args.epochs):
                     model_feature = self.features[sample*9+step]
-                    model_label = self.labels[sample]
+                    model_label = self.labels[sample][step]
 
                     # 返回当前时间
                     t = time.time()
@@ -101,9 +100,12 @@ class gcnSetting():
                     output = self.model(model_feature, self.adj)
 
                     # 损失函数，仅对训练集的节点进行计算，即：优化对训练数据集进行
-                    loss_train = F.nll_loss(output, model_label)
+                    loss_train = F.nll_loss(output, model_label.long())
                     # 计算准确率
                     acc_train = accuracy(output, model_label)
+                    # debug
+                    # output_view(sample, step, epoch, output, model_label)
+                    # debug
                     # 反向求导  Back Propagation
                     loss_train.backward()
                     # 更新所有的参数
@@ -118,18 +120,17 @@ class gcnSetting():
                         for val_sample in self.idx_val:
                             for val_step in range(8):
                                 model_feature = self.features[val_sample * 9 + val_step]
-                                model_label = self.labels[val_sample]
+                                model_label = self.labels[val_sample][val_step]
                                 self.model.eval()
                                 output = self.model(model_feature, self.adj)
 
                                 # 验证集的损失函数
-                                loss_val = F.nll_loss(output, model_label)
+                                loss_val = F.nll_loss(output, model_label.long())
                                 acc_val = accuracy(output, model_label)
 
                     # 记录训练过程中损失值和准确率的变化，用于画图
                     loss_history.append(loss_train.item())
                     val_acc_history.append(acc_val.item())
-
                     print('Sample:{:04d}'.format(sample),
                           'Step:{:02d}'.format(step),
                           'Epoch: {:04d}'.format(epoch + 1),
@@ -139,6 +140,7 @@ class gcnSetting():
                           'acc_val: {:.4f}'.format(acc_val.item()),
                           'time: {:.4f}s'.format(time.time() - t))
 
+        plot_loss_with_acc_ER(loss_history, val_acc_history)
         torch.save(self.model.state_dict(), "gcn_model.pth")
         return loss_history, val_acc_history
 
@@ -170,5 +172,3 @@ class gcnSetting():
 
 if __name__ == '__main__':
     gcn = gcnSetting()
-    
-    gcn.test(7)
